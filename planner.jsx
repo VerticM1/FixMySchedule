@@ -38,6 +38,9 @@ const Icons = {
   Sparkle:    ({s,c}) => <I size={s||15} stroke={c||"currentColor"} fill={c||"currentColor"}><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></I>,
   ChevDown:   ({s,c}) => <I size={s||14} stroke={c||"currentColor"} sw={2}><polyline points="6 9 12 15 18 9"/></I>,
   Trash:      ({s,c}) => <I size={s||14} stroke={c||"currentColor"}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></I>,
+  UserPlus:   ({s,c}) => <I size={s||15} stroke={c||"currentColor"}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></I>,
+  UserMinus:  ({s,c}) => <I size={s||15} stroke={c||"currentColor"}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></I>,
+  LinkOff:    ({s,c}) => <I size={s||14} stroke={c||"currentColor"}><path d="M18.84 12.25l1.72-1.71a4.5 4.5 0 0 0-6.36-6.36l-1.72 1.71"/><path d="M5.17 11.75l-1.72 1.71a4.5 4.5 0 0 0 6.36 6.36l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/></I>,
 };
 
 // ════════════════════════════════════════════════════════
@@ -74,6 +77,17 @@ const RECUR_OPTS = [
   {value:"weekdays",label:"Weekdays"},
   {value:"weekly",  label:"Weekly"},
   {value:"monthly", label:"Monthly"},
+];
+
+const USER_COLORS = [
+  {bg:"#7C6FF7", soft:"#EAE9FD"},
+  {bg:"#4CAF82", soft:"#E8F5EF"},
+  {bg:"#E86B6B", soft:"#FDE8E8"},
+  {bg:"#E8A43C", soft:"#FDF4E3"},
+  {bg:"#4A90D9", soft:"#E3EEFA"},
+  {bg:"#B06FD4", soft:"#F0E5FA"},
+  {bg:"#E8686B", soft:"#FDE8E8"},
+  {bg:"#3BBFBF", soft:"#E0F5F5"},
 ];
 
 // ════════════════════════════════════════════════════════
@@ -204,12 +218,95 @@ function getGreeting() {
 }
 
 // ════════════════════════════════════════════════════════
+//  SWIPEABLE USER ROW
+// ════════════════════════════════════════════════════════
+function SwipeableUserRow({ user, isYou, onRemove }) {
+  const [offsetX, setOffsetX]     = useState(0);
+  const [dragging, setDragging]   = useState(false);
+  const [removing, setRemoving]   = useState(false);
+  const startXRef                 = useRef(null);
+  const THRESHOLD                 = 72;
+
+  const onPointerDown = (e) => {
+    if (isYou) return;
+    startXRef.current = e.clientX ?? e.touches?.[0]?.clientX;
+    setDragging(true);
+  };
+  const onPointerMove = (e) => {
+    if (!dragging || startXRef.current === null) return;
+    const x = e.clientX ?? e.touches?.[0]?.clientX;
+    const dx = x - startXRef.current;
+    // only allow left-swipe (negative) up to -120
+    setOffsetX(Math.max(-120, Math.min(0, dx)));
+  };
+  const onPointerUp = () => {
+    if (!dragging) return;
+    setDragging(false);
+    if (offsetX <= -THRESHOLD) {
+      // commit remove: fly out then call onRemove
+      setRemoving(true);
+      setTimeout(() => onRemove(), 280);
+    } else {
+      setOffsetX(0);
+    }
+    startXRef.current = null;
+  };
+
+  // reveal amount for background (0–1)
+  const reveal = Math.min(1, Math.abs(offsetX) / THRESHOLD);
+
+  return (
+    <div style={{ position:"relative", borderRadius:10, overflow:"hidden", marginBottom:6, userSelect:"none" }}
+      onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}
+      onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp}>
+
+      {/* Red reveal layer */}
+      {!isYou && (
+        <div style={{ position:"absolute", inset:0, background:C.rose, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:16, opacity: reveal }}>
+          <div style={{ display:"flex", alignItems:"center", gap:5, color:"#fff" }}>
+            <Icons.LinkOff s={13} c="#fff"/>
+            <span style={{ fontSize:12, fontWeight:600 }}>Remove</span>
+          </div>
+        </div>
+      )}
+
+      {/* Foreground card */}
+      <div style={{
+        display:"flex", alignItems:"center", gap:8, padding:"7px 8px",
+        background: removing ? "transparent" : C.surface,
+        borderRadius:10, border:`1.5px solid ${C.border}`,
+        transform: removing ? `translateX(-100%)` : `translateX(${offsetX}px)`,
+        transition: dragging ? "none" : removing ? "transform .28s ease-in" : "transform .22s cubic-bezier(.34,1.56,.64,1)",
+        cursor: isYou ? "default" : "grab",
+        WebkitUserSelect:"none",
+      }}>
+        <div style={{ width:28, height:28, borderRadius:"50%", background:user.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#fff", flexShrink:0 }}>
+          {user.label[0].toUpperCase()}
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, color: isYou ? C.text : C.muted, fontWeight: isYou ? 500 : 400, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+            {user.label}{isYou ? " (you)" : ""}
+          </div>
+        </div>
+        <div style={{ width:7, height:7, borderRadius:"50%", background:user.bg, flexShrink:0 }}/>
+        {!isYou && (
+          <div style={{ fontSize:10, color:C.mutedL, opacity: Math.max(0, 1 - reveal * 2) }}>
+            ‹ swipe
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
 //  SUB-COMPONENTS
 // ════════════════════════════════════════════════════════
-function EventCard({ ev, onDelete, currentUser, compact=false }) {
+function EventCard({ ev, onDelete, currentUser, sharedUsers, compact=false }) {
   const cat = CATS[ev.category]||CATS.other;
   const CatIcon = cat.Icon;
-  const uc = USERS[ev.user]?.bg || cat.color;
+  const userObj = sharedUsers?.find(u => u.id === ev.user) || sharedUsers?.[0];
+  const uc = userObj?.bg || cat.color;
   return (
     <div style={{ display:"flex", alignItems:"flex-start", gap:11, background:cat.soft, borderRadius:11, padding: compact?"10px 13px":"13px 15px", borderLeft:`3px solid ${uc}` }}>
       <div style={{ width:compact?28:32, height:compact?28:32, borderRadius:8, background:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 1px 4px rgba(0,0,0,.07)" }}>
@@ -222,11 +319,11 @@ function EventCard({ ev, onDelete, currentUser, compact=false }) {
           {ev.time ? fmtTime(ev.time) : "All day"}
           {ev.duration ? ` · ${ev.duration}min` : ""}
           {ev._recurring && <span style={{ display:"flex", alignItems:"center", gap:2 }}><Icons.Repeat s={10} c={C.muted}/> recurring</span>}
-          <span style={{ color:uc, fontWeight:500 }}>{USERS[ev.user]?.label||"You"}</span>
+          <span style={{ color:uc, fontWeight:500 }}>{userObj?.label||"You"}</span>
         </div>
         {ev.notes && <div style={{ fontSize:11.5, color:C.muted, marginTop:3, fontStyle:"italic" }}>{ev.notes}</div>}
       </div>
-      {ev.user===currentUser && onDelete && (
+      {ev.user===sharedUsers?.[0]?.id && onDelete && (
         <button onClick={onDelete} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, display:"flex", alignItems:"center", padding:3, borderRadius:4, transition:"color .15s" }}
           onMouseEnter={e=>e.currentTarget.style.color=C.rose} onMouseLeave={e=>e.currentTarget.style.color=C.muted}>
           <Icons.Trash s={12}/>
@@ -250,7 +347,14 @@ export default function PlannerApp() {
   const [baseEvents, setBaseEvents]   = useState({});       // raw stored events
   const [selectedDay, setSelectedDay] = useState(null);
   const [currentUser]                 = useState(0);
-  const [activeUsers]                 = useState([0,1,2]);
+  const [sharedUsers, setSharedUsers] = useState([
+    {id:0, label:"You",    bg:"#7C6FF7", soft:"#EAE9FD"},
+    {id:1, label:"Alex",   bg:"#4CAF82", soft:"#E8F5EF"},
+    {id:2, label:"Jordan", bg:"#E86B6B", soft:"#FDE8E8"},
+  ]);
+  const [showInvite, setShowInvite]   = useState(false);
+  const [inviteName, setInviteName]   = useState("");
+  const [inviteColor, setInviteColor] = useState(0);
 
   // Voice
   const [listening, setListening]     = useState(false);
@@ -276,13 +380,38 @@ export default function PlannerApp() {
 
   // ── Persist ──
   useEffect(() => {
-    (async () => { try { const r=await window.storage.get("planner-v3"); if(r) setBaseEvents(JSON.parse(r.value)); } catch {} })();
+    (async () => {
+      try {
+        const r = await window.storage.get("planner-v3");
+        if (r) setBaseEvents(JSON.parse(r.value));
+        const u = await window.storage.get("planner-users");
+        if (u) setSharedUsers(JSON.parse(u.value));
+      } catch {}
+    })();
   }, []);
 
   const save = useCallback(async evs => {
     setBaseEvents(evs);
     try { await window.storage.set("planner-v3", JSON.stringify(evs)); } catch {}
   }, []);
+
+  const saveUsers = useCallback(async (users) => {
+    setSharedUsers(users);
+    try { await window.storage.set("planner-users", JSON.stringify(users)); } catch {}
+  }, []);
+
+  const removeUser = (id) => {
+    saveUsers(sharedUsers.filter(u => u.id !== id));
+  };
+
+  const addInvite = () => {
+    if (!inviteName.trim()) return;
+    const col = USER_COLORS[inviteColor];
+    const newUser = { id: Date.now(), label: inviteName.trim(), bg: col.bg, soft: col.soft };
+    saveUsers([...sharedUsers, newUser]);
+    setInviteName(""); setInviteColor(0); setShowInvite(false);
+    showToast(`${newUser.label} added to calendar`);
+  };
 
   // ── Expanded events (recurring flattened) ──
   const rangeStart = tdk(year, month-1, 1);
@@ -305,7 +434,8 @@ export default function PlannerApp() {
   // ── Add event ──
   const commitEvent = async (data) => {
     const id = Date.now().toString();
-    const ev = { id, title:data.title, date:data.date||todayKey, time:data.time||null, duration:data.duration||null, category:data.category||"personal", recurrence:data.recurrence||"none", user:currentUser, notes:data.notes||"" };
+    const myId = sharedUsers[0]?.id ?? 0;
+    const ev = { id, title:data.title, date:data.date||todayKey, time:data.time||null, duration:data.duration||null, category:data.category||"personal", recurrence:data.recurrence||"none", user:myId, notes:data.notes||"" };
     const key = ev.date;
     const updated = { ...baseEvents, [key]: [...(baseEvents[key]||[]), ev] };
     await save(updated);
@@ -633,18 +763,60 @@ export default function PlannerApp() {
 
           {/* Shared users */}
           <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:".07em", marginBottom:9, display:"flex", alignItems:"center", gap:5 }}>
-              <Icons.Users s={11} c={C.muted}/> Shared With
+            <div style={{ fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:".07em", marginBottom:9, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ display:"flex", alignItems:"center", gap:5 }}><Icons.Users s={11} c={C.muted}/> Shared With</span>
+              <button onClick={()=>setShowInvite(v=>!v)} title="Add person"
+                style={{ background:showInvite?C.accentS:"none", border:"none", cursor:"pointer", color:showInvite?C.accent:C.muted, display:"flex", alignItems:"center", padding:"3px 5px", borderRadius:6, transition:"all .15s" }}>
+                <Icons.UserPlus s={12} c={showInvite?C.accent:C.muted}/>
+              </button>
             </div>
-            {USERS.slice(0,4).map((u,i)=>(
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7, opacity:activeUsers.includes(i)?1:.38 }}>
-                <div style={{ width:26, height:26, borderRadius:"50%", background:u.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:600, color:"#fff", flexShrink:0 }}>
-                  {u.label[0]}
+
+            {/* Invite form */}
+            {showInvite && (
+              <div style={{ background:C.accentS, borderRadius:11, padding:"11px 12px", marginBottom:10 }} className="fade">
+                <div style={{ fontSize:11, fontWeight:600, color:C.accent, marginBottom:8, textTransform:"uppercase", letterSpacing:".06em" }}>Invite Person</div>
+                <input
+                  autoFocus
+                  placeholder="Name…"
+                  value={inviteName}
+                  onChange={e=>setInviteName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&addInvite()}
+                  style={{ width:"100%", padding:"8px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, fontSize:13, background:"#fff", marginBottom:9 }}
+                />
+                {/* Color swatches */}
+                <div style={{ display:"flex", gap:5, marginBottom:9, flexWrap:"wrap" }}>
+                  {USER_COLORS.map((col,i)=>(
+                    <button key={i} onClick={()=>setInviteColor(i)}
+                      style={{ width:20, height:20, borderRadius:"50%", background:col.bg, border:inviteColor===i?`2px solid ${C.text}`:"2px solid transparent", cursor:"pointer", padding:0, transition:"transform .12s" }}
+                      onMouseEnter={e=>e.currentTarget.style.transform="scale(1.2)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+                    />
+                  ))}
                 </div>
-                <span style={{ fontSize:13, color:i===currentUser?C.text:C.muted }}>{u.label}{i===currentUser?" (you)":""}</span>
-                <div style={{ marginLeft:"auto", width:7, height:7, borderRadius:"50%", background:activeUsers.includes(i)?u.bg:C.border }}/>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button className="btn-p" style={{ flex:1, justifyContent:"center", fontSize:12, padding:"7px 0" }} onClick={addInvite}>
+                    <Icons.UserPlus s={12}/> Add
+                  </button>
+                  <button className="btn-g" style={{ fontSize:12, padding:"7px 10px" }} onClick={()=>setShowInvite(false)}>
+                    <Icons.X s={11}/>
+                  </button>
+                </div>
               </div>
+            )}
+
+            {sharedUsers.map((u) => (
+              <SwipeableUserRow
+                key={u.id}
+                user={u}
+                isYou={u.id === currentUser}
+                onRemove={() => removeUser(u.id)}
+              />
             ))}
+
+            {sharedUsers.length === 1 && (
+              <div style={{ fontSize:11.5, color:C.mutedL, textAlign:"center", padding:"8px 0", fontStyle:"italic" }}>
+                Just you — invite someone ↑
+              </div>
+            )}
           </div>
 
           {/* Category legend */}
@@ -758,7 +930,7 @@ export default function PlannerApp() {
                   </div>
                 : <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                     {todayEvs.map(ev=>(
-                      <EventCard key={ev.id+ev.date} ev={ev} currentUser={currentUser}
+                      <EventCard key={ev.id+ev.date} ev={ev} currentUser={currentUser} sharedUsers={sharedUsers}
                         onDelete={()=>deleteEvent(ev.date, ev.id)} />
                     ))}
                   </div>
@@ -782,7 +954,7 @@ export default function PlannerApp() {
                       </div>
                       <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                         {evs.map(ev=>(
-                          <EventCard key={ev.id+ev.date} ev={ev} currentUser={currentUser} compact onDelete={()=>deleteEvent(ev.date, ev.id)}/>
+                          <EventCard key={ev.id+ev.date} ev={ev} currentUser={currentUser} sharedUsers={sharedUsers} compact onDelete={()=>deleteEvent(ev.date, ev.id)}/>
                         ))}
                         {more>0 && <div style={{ fontSize:12, color:C.muted, paddingLeft:4 }}>+{more} more · <span style={{ cursor:"pointer", textDecoration:"underline" }} onClick={()=>{setView("calendar");setTimeout(()=>setSelectedDay(dk),50);}}>see all</span></div>}
                       </div>
@@ -839,7 +1011,8 @@ export default function PlannerApp() {
                     </div>
                     {dayEvs.map(ev=>{
                       const cat=CATS[ev.category]||CATS.other;
-                      const uc=USERS[ev.user]?.bg||cat.color;
+                      const userObj=sharedUsers.find(u=>u.id===ev.user);
+                      const uc=userObj?.bg||cat.color;
                       return (
                         <div key={ev.id+ev.date} className="hov-pill" style={{ fontSize:10.5, fontWeight:500, color:uc, background:cat.soft, borderRadius:5, padding:"2px 5px", marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", borderLeft:`2.5px solid ${uc}` }}>
                           {ev.time?fmtTime(ev.time)+" ":""}{ev.title}
@@ -873,7 +1046,7 @@ export default function PlannerApp() {
                     </div>
                   : <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
                       {dayPanelEvents.map(ev=>(
-                        <EventCard key={ev.id+ev.date} ev={ev} currentUser={currentUser}
+                        <EventCard key={ev.id+ev.date} ev={ev} currentUser={currentUser} sharedUsers={sharedUsers}
                           onDelete={()=>deleteEvent(ev.date, ev.id)} />
                       ))}
                     </div>
